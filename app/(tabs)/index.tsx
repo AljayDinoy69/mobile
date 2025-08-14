@@ -234,25 +234,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-                  setShowLogin(false);
-                  clearLogin();
-                  if (found.role === 'admin') {
-                    router.push('/dashboard-admin');
-                  } else if (found.role === 'responder') {
-                    router.push('/dashboard-responder');
-                  } else {
-                    router.push('/dashboard');
-                  }
-                } else {
-                  alert('Invalid email or password');
-                }
-              }}
-            >
-              <ThemedText style={styles.modalActionBtnText}>Log In</ThemedText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Sign Up Modal */}
       <Modal visible={showSignUp} animationType="slide" transparent>
