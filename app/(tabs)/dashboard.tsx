@@ -2,8 +2,8 @@ import DropdownMenu from '@/components/DropdownMenu';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useUser } from '@/components/UserContext';
+import { ReportsService, type Report } from '@/lib/reports';
 import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -21,42 +21,44 @@ export default function DashboardScreen() {
   const [profileContact, setProfileContact] = useState(user?.contact || '');
   const [profileAddress, setProfileAddress] = useState(user?.address || '');
   const [showReportsModal, setShowReportsModal] = useState(false);
-  const [myReports, setMyReports] = useState<any[]>([]);
+  const [myReports, setMyReports] = useState<Report[]>([]);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [allReports, setAllReports] = useState<any[]>([]);
+  const [allReports, setAllReports] = useState<Report[]>([]);
   const [editReportModalVisible, setEditReportModalVisible] = useState(false);
-  const [editingReport, setEditingReport] = useState<any>(null);
+  const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editChiefComplaint, setEditChiefComplaint] = useState('');
   const [editPersonInvolved, setEditPersonInvolved] = useState('');
   const [editDescription, setEditDescription] = useState('');
 
   // Load user's submitted reports
   useEffect(() => {
-    if (!user?.email) return;
+    if (!user?.id) return;
     (async () => {
-      const key = `user-reports-${user.email}`;
-      const stored = await AsyncStorage.getItem(key);
-      setMyReports(stored ? JSON.parse(stored) : []);
+      const { data, error } = await ReportsService.getUserReports(user.id);
+      if (!error) {
+        setMyReports(data);
+      }
     })();
-  }, [user?.email, showReportsModal]);
+  }, [user?.id, showReportsModal]);
 
   // Load all reports for status modal
   const loadAllReports = async () => {
-    const allReportsKey = 'all-reports';
-    const allReportsStr = await AsyncStorage.getItem(allReportsKey);
-    setAllReports(allReportsStr ? JSON.parse(allReportsStr) : []);
+    const { data, error } = await ReportsService.getAllReports();
+    if (!error) {
+      setAllReports(data);
+    }
   };
 
   // Sort reports from newest to oldest
-  const sortReportsByDate = (reports: any[]) => {
-    return reports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const sortReportsByDate = (reports: Report[]) => {
+    return reports.sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
   };
 
   // Edit report handler
-  const openEditReportModal = (report: any) => {
+  const openEditReportModal = (report: Report) => {
     setEditingReport(report);
-    setEditChiefComplaint(report.chiefComplaint || '');
-    setEditPersonInvolved(report.personInvolved || '');
+    setEditChiefComplaint(report.chief_complaint || '');
+    setEditPersonInvolved(report.person_involved || '');
     setEditDescription(report.description || '');
     setEditReportModalVisible(true);
   };
@@ -69,54 +71,33 @@ export default function DashboardScreen() {
   };
   const saveEditedReport = async () => {
     if (!editingReport) return;
-    // Update in user reports
-    const userKey = `user-reports-${user?.email}`;
-    const userReportsStr = await AsyncStorage.getItem(userKey);
-    const userReports = userReportsStr ? JSON.parse(userReportsStr) : [];
-    const updatedUserReports = userReports.map((r: any) => r.id === editingReport.id ? { ...r, chiefComplaint: editChiefComplaint, personInvolved: editPersonInvolved, description: editDescription } : r);
-    await AsyncStorage.setItem(userKey, JSON.stringify(updatedUserReports));
-    setMyReports(updatedUserReports);
-    // Update in all-reports
-    const allReportsKey = 'all-reports';
-    const allReportsStr = await AsyncStorage.getItem(allReportsKey);
-    const allReports = allReportsStr ? JSON.parse(allReportsStr) : [];
-    const updatedAllReports = allReports.map((r: any) => r.id === editingReport.id ? { ...r, chiefComplaint: editChiefComplaint, personInvolved: editPersonInvolved, description: editDescription } : r);
-    await AsyncStorage.setItem(allReportsKey, JSON.stringify(updatedAllReports));
-    // Update in responder-reports
-    if (editingReport.responders && editingReport.responders.length > 0) {
-      for (const responderEmail of editingReport.responders) {
-        const responderKey = `responder-reports-${responderEmail}`;
-        const responderReportsStr = await AsyncStorage.getItem(responderKey);
-        const responderReports = responderReportsStr ? JSON.parse(responderReportsStr) : [];
-        const updatedResponderReports = responderReports.map((r: any) => r.id === editingReport.id ? { ...r, chiefComplaint: editChiefComplaint, personInvolved: editPersonInvolved, description: editDescription } : r);
-        await AsyncStorage.setItem(responderKey, JSON.stringify(updatedResponderReports));
+    
+    const { error } = await ReportsService.updateReport(editingReport.id!, {
+      chief_complaint: editChiefComplaint,
+      person_involved: editPersonInvolved,
+      description: editDescription,
+    });
+    
+    if (!error) {
+      // Reload reports
+      if (user?.id) {
+        const { data } = await ReportsService.getUserReports(user.id);
+        if (data) setMyReports(data);
       }
     }
+    
     closeEditReportModal();
   };
   // Delete report handler
-  const deleteReport = async (report: any) => {
-    // Remove from user reports
-    const userKey = `user-reports-${user.email}`;
-    const userReportsStr = await AsyncStorage.getItem(userKey);
-    const userReports = userReportsStr ? JSON.parse(userReportsStr) : [];
-    const updatedUserReports = userReports.filter((r: any) => r.id !== report.id);
-    await AsyncStorage.setItem(userKey, JSON.stringify(updatedUserReports));
-    setMyReports(updatedUserReports);
-    // Remove from all-reports
-    const allReportsKey = 'all-reports';
-    const allReportsStr = await AsyncStorage.getItem(allReportsKey);
-    const allReports = allReportsStr ? JSON.parse(allReportsStr) : [];
-    const updatedAllReports = allReports.filter((r: any) => r.id !== report.id);
-    await AsyncStorage.setItem(allReportsKey, JSON.stringify(updatedAllReports));
-    // Remove from responder-reports
-    if (report.responders && report.responders.length > 0) {
-      for (const responderEmail of report.responders) {
-        const responderKey = `responder-reports-${responderEmail}`;
-        const responderReportsStr = await AsyncStorage.getItem(responderKey);
-        const responderReports = responderReportsStr ? JSON.parse(responderReportsStr) : [];
-        const updatedResponderReports = responderReports.filter((r: any) => r.id !== report.id);
-        await AsyncStorage.setItem(responderKey, JSON.stringify(updatedResponderReports));
+  const deleteReport = async (report: Report) => {
+    if (!report.id) return;
+    
+    const { error } = await ReportsService.deleteReport(report.id);
+    if (!error) {
+      // Reload reports
+      if (user?.id) {
+        const { data } = await ReportsService.getUserReports(user.id);
+        if (data) setMyReports(data);
       }
     }
   };
@@ -228,27 +209,27 @@ export default function DashboardScreen() {
             <ScrollView style={{ width: '100%' }}>
               {myReports.length === 0 ? (
                 <Text style={{ color: '#888', textAlign: 'center', marginTop: 20 }}>No reports submitted yet.</Text>
-              ) : myReports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((report: any) => (
+              ) : sortReportsByDate(myReports).map((report: Report) => (
                 <View key={report.id} style={{ backgroundColor: '#f6f8fa', borderRadius: 10, padding: 12, marginBottom: 10 }}>
                   <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>
-                    {report.chiefComplaint || report.title || 'Emergency Report'}
+                    {report.chief_complaint || 'Emergency Report'}
                   </Text>
                   <Text style={{ color: '#555', marginBottom: 2 }}>{report.description}</Text>
                   
                   {/* User Information */}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <Text style={{ color: '#888', fontSize: 12 }}>👤 Reporter: {report.fullName || 'Anonymous'}</Text>
-                    <Text style={{ color: '#888', fontSize: 12 }}>📞 Contact: {report.contactNumber || 'N/A'}</Text>
+                    <Text style={{ color: '#888', fontSize: 12 }}>👤 Reporter: {report.full_name || 'Anonymous'}</Text>
+                    <Text style={{ color: '#888', fontSize: 12 }}>📞 Contact: {report.contact_number || 'N/A'}</Text>
                   </View>
                   
                   {/* Person Involved */}
-                  <Text style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>👥 Person Involved: {report.personInvolved || 'N/A'}</Text>
+                  <Text style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>👥 Person Involved: {report.person_involved || 'N/A'}</Text>
                   
-                  {report.photo && (
-                    <Image source={{ uri: report.photo }} style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 8 }} resizeMode="cover" />
+                  {report.photo_url && (
+                    <Image source={{ uri: report.photo_url }} style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 8 }} resizeMode="cover" />
                   )}
                   <Text style={{ color: '#888', fontSize: 12, marginBottom: 2 }}>Status: {report.status}</Text>
-                  <Text style={{ color: '#888', fontSize: 12, marginBottom: 2 }}>Submitted: {new Date(report.createdAt).toLocaleString()}</Text>
+                  <Text style={{ color: '#888', fontSize: 12, marginBottom: 2 }}>Submitted: {report.created_at ? new Date(report.created_at).toLocaleString() : 'N/A'}</Text>
                   {report.responders && report.responders.length > 0 && (
                     <Text style={{ color: '#377DFF', fontSize: 12, marginBottom: 2 }}>Sent to: {report.responders.join(', ')}</Text>
                   )}
@@ -277,14 +258,14 @@ export default function DashboardScreen() {
             <ScrollView style={{ width: '100%' }}>
               {allReports.length === 0 ? (
                 <Text style={{ color: '#888', textAlign: 'center', marginTop: 20 }}>No reports submitted yet.</Text>
-              ) : sortReportsByDate(allReports).map((report: any) => (
+              ) : sortReportsByDate(allReports).map((report: Report) => (
                 <View key={report.id} style={{ backgroundColor: '#f6f8fa', borderRadius: 10, padding: 12, marginBottom: 10 }}>
                   <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>
-                    {report.chiefComplaint || report.title || 'Emergency Report'}
+                    {report.chief_complaint || 'Emergency Report'}
                   </Text>
-                  <Text style={{ color: '#888', fontSize: 13, marginBottom: 2 }}>👥 Person Involved: {report.personInvolved || 'N/A'}</Text>
+                  <Text style={{ color: '#888', fontSize: 13, marginBottom: 2 }}>👥 Person Involved: {report.person_involved || 'N/A'}</Text>
                   <Text style={{ color: '#888', fontSize: 13, marginBottom: 2 }}>Status: {report.status}</Text>
-                  <Text style={{ color: '#888', fontSize: 13, marginBottom: 2 }}>Submitted: {report.createdAt ? new Date(report.createdAt).toLocaleString() : 'N/A'}</Text>
+                  <Text style={{ color: '#888', fontSize: 13, marginBottom: 2 }}>Submitted: {report.created_at ? new Date(report.created_at).toLocaleString() : 'N/A'}</Text>
                 </View>
               ))}
             </ScrollView>

@@ -8,7 +8,7 @@ import { Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, Touc
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { setUser, users, getUserByEmail, addUser } = useUser();
+  const { user, setUser, users, getUserByEmail, addUser, signIn, signUp } = useUser();
   const [showLogin, setShowLogin] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
@@ -219,9 +219,21 @@ export default function HomeScreen() {
             <TouchableOpacity 
               style={[styles.modalActionBtn, { backgroundColor: '#1E3A8A' }]} 
               onPress={() => {
-                const found = users.find(u => u.email === loginEmail && u.password === loginPassword);
-                if (found) {
-                  setUser(found);
+                signIn(loginEmail, loginPassword).then(({ error }) => {
+                  if (!error) {
+                    setShowLogin(false);
+                    clearLogin();
+                  } else {
+                    alert('Invalid email or password');
+                  }
+                });
+              }}
+            >
+              <ThemedText style={styles.modalActionBtnText}>Log In</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
                   setShowLogin(false);
                   clearLogin();
                   if (found.role === 'admin') {
@@ -300,18 +312,25 @@ export default function HomeScreen() {
             <TouchableOpacity 
               style={[styles.modalActionBtn, { backgroundColor: '#059669' }]} 
               onPress={async () => {
-                const newUser = {
+                if (signUpPassword !== signUpConfirmPassword) {
+                  alert('Passwords do not match');
+                  return;
+                }
+                
+                const userData = {
                   name: `${signUpFirstName} ${signUpLastName}`.trim(),
-                  email: signUpEmail,
                   contact: signUpContact,
-                  password: signUpPassword,
                   role: 'user',
                 };
-                await addUser(newUser);
-                setUser(newUser);
-                setShowSignUp(false);
-                clearSignUp();
-                router.push('/dashboard');
+                
+                const { error } = await signUp(signUpEmail, signUpPassword, userData);
+                if (!error) {
+                  setShowSignUp(false);
+                  clearSignUp();
+                  alert('Account created successfully! Please check your email to verify your account.');
+                } else {
+                  alert('Error creating account: ' + error.message);
+                }
               }}
             >
               <ThemedText style={styles.modalActionBtnText}>Sign Up</ThemedText>

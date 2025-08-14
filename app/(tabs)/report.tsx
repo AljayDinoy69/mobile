@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useUser } from '@/components/UserContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ReportsService } from '@/lib/reports';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -165,60 +165,58 @@ export default function EmergencyReportScreen() {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      const report = {
-        id: Date.now().toString(),
+      const reportData = {
+        user_id: user?.id,
         fullName: fullName.trim() || (user?.name || 'Anonymous'),
         contactNumber: contactNumber.trim() || (user?.contact || 'N/A'),
         chiefComplaint,
         personInvolved,
         description,
-        photo,
-        location,
+        photo_url: photo || '',
+        location_lat: location?.coords?.latitude,
+        location_lng: location?.coords?.longitude,
         status: 'Awaiting Assessment',
-        createdAt: new Date().toISOString(),
         priority: 'medium',
-        type: 'other',
         responders: selectedResponders,
       };
-      // Send report to each selected responder
-      for (const responderEmail of selectedResponders) {
-        const key = `responder-reports-${responderEmail}`;
-        const existing = await AsyncStorage.getItem(key);
-        const reports = existing ? JSON.parse(existing) : [];
-        await AsyncStorage.setItem(key, JSON.stringify([...reports, report]));
+      
+      const { data, error } = await ReportsService.createReport({
+        user_id: reportData.user_id,
+        full_name: reportData.fullName,
+        contact_number: reportData.contactNumber,
+        chief_complaint: reportData.chiefComplaint,
+        person_involved: reportData.personInvolved,
+        description: reportData.description,
+        photo_url: reportData.photo_url,
+        location_lat: reportData.location_lat,
+        location_lng: reportData.location_lng,
+        status: reportData.status,
+        priority: reportData.priority,
+        responders: reportData.responders,
+      });
+      
+      if (error) {
+        throw error;
       }
-      // Save report to user's own submitted reports
-      const userInfoStr = await AsyncStorage.getItem('user-info');
-      const userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
-      if (userInfo && userInfo.email) {
-        const userKey = `user-reports-${userInfo.email}`;
-        const userReports = await AsyncStorage.getItem(userKey);
-        const parsedUserReports = userReports ? JSON.parse(userReports) : [];
-        await AsyncStorage.setItem(userKey, JSON.stringify([...parsedUserReports, report]));
-      }
-      // Save report to global all-reports for admin dashboard
-      const allReportsKey = 'all-reports';
-      const allReports = await AsyncStorage.getItem(allReportsKey);
-      const parsedAllReports = allReports ? JSON.parse(allReports) : [];
-      await AsyncStorage.setItem(allReportsKey, JSON.stringify([...parsedAllReports, report]));
+      
       setTimeout(() => {
         setSubmitting(false);
         clearForm();
         
         // Create detailed notification message
-        const notificationMessage = `✅ Emergency Report Submitted Successfully!
+        const notificationMessage = `✅ Emergency Report Submitted Successfully and Synchronized!
 
 🚨 Chief Complaint: ${chiefComplaint}
 👤 Reporter: ${fullName.trim() || 'Anonymous'}
 📞 Contact: ${contactNumber}
 👥 Person Involved: ${personInvolved}
-📍 Location: ${location?.coords?.latitude}, ${location?.coords?.longitude}
+📍 Location: ${reportData.location_lat}, ${reportData.location_lng}
 📸 Photo: ${photo ? 'Included' : 'Not provided'}
 📝 Description: ${description || 'No additional details'}
 🕒 Submitted: ${new Date().toLocaleString()}
 👥 Sent to: ${selectedResponders.length} responder(s)
 
-Your report has been sent to the selected emergency responders. They will review and respond to your emergency as soon as possible.`;
+Your report has been synchronized across all devices and sent to the selected emergency responders. They will review and respond to your emergency as soon as possible.`;
         
         Alert.alert('Report Submitted Successfully!', notificationMessage);
         router.back();

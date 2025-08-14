@@ -1,7 +1,7 @@
 import DropdownMenu from '@/components/DropdownMenu';
 import { useUser, type UserInfo } from '@/components/UserContext';
+import { ReportsService, type Report } from '@/lib/reports';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [deptFilter, setDeptFilter] = useState('all');
-  const [allReports, setAllReports] = useState<any[]>([]);
+  const [allReports, setAllReports] = useState<Report[]>([]);
 
   // Dynamic stats
   const activeUsers = users.length;
@@ -43,8 +43,10 @@ export default function AdminDashboard() {
   useEffect(() => {
     let interval: any;
     const loadReports = async () => {
-      const stored = await AsyncStorage.getItem('all-reports');
-      setAllReports(stored ? JSON.parse(stored) : []);
+      const { data, error } = await ReportsService.getAllReports();
+      if (!error) {
+        setAllReports(data);
+      }
     };
     if (tab === 'reports') {
       loadReports();
@@ -54,8 +56,8 @@ export default function AdminDashboard() {
   }, [tab]);
 
   // Sort reports from newest to oldest
-  const sortReportsByDate = (reports: any[]) => {
-    return reports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const sortReportsByDate = (reports: Report[]) => {
+    return reports.sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
   };
 
   // Filtered users
@@ -278,12 +280,12 @@ export default function AdminDashboard() {
           <Text style={styles.sectionDesc}>Complete overview of all emergency reports submitted to the system</Text>
           {allReports.length === 0 ? (
             <Text style={{ color: '#888', textAlign: 'center', marginTop: 20 }}>No reports submitted yet.</Text>
-          ) : sortReportsByDate(allReports).map((report: any) => (
+          ) : sortReportsByDate(allReports).map((report: Report) => (
             <View key={report.id} style={styles.reportCard}>
               {/* Report Header */}
               <View style={styles.reportHeader}>
                 <Text style={styles.reportTitle}>
-                  {report.chiefComplaint || report.title || 'Emergency Report'}
+                  {report.chief_complaint || 'Emergency Report'}
                 </Text>
                 <View style={[styles.statusBadge, { backgroundColor: report.status === 'Completed' ? '#4CAF50' : '#FF9800' }]}>
                   <Text style={styles.statusBadgeText}>{report.status || 'Awaiting Assessment'}</Text>
@@ -291,8 +293,8 @@ export default function AdminDashboard() {
               </View>
               
               {/* Incident Photo */}
-              {report.photo && (
-                <Image source={{ uri: report.photo }} style={styles.reportImage} resizeMode="cover" />
+              {report.photo_url && (
+                <Image source={{ uri: report.photo_url }} style={styles.reportImage} resizeMode="cover" />
               )}
               
               {/* User Information */}
@@ -300,11 +302,11 @@ export default function AdminDashboard() {
                 <Text style={styles.infoSectionTitle}>👤 Reporter Information</Text>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Full Name:</Text>
-                  <Text style={styles.infoValue}>{report.fullName || 'Anonymous'}</Text>
+                  <Text style={styles.infoValue}>{report.full_name || 'Anonymous'}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Contact Number:</Text>
-                  <Text style={styles.infoValue}>{report.contactNumber || 'N/A'}</Text>
+                  <Text style={styles.infoValue}>{report.contact_number || 'N/A'}</Text>
                 </View>
               </View>
               
@@ -313,11 +315,11 @@ export default function AdminDashboard() {
                 <Text style={styles.infoSectionTitle}>🚨 Incident Details</Text>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Chief Complaint:</Text>
-                  <Text style={styles.infoValue}>{report.chiefComplaint || 'N/A'}</Text>
+                  <Text style={styles.infoValue}>{report.chief_complaint || 'N/A'}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Person Involved:</Text>
-                  <Text style={styles.infoValue}>{report.personInvolved || 'N/A'}</Text>
+                  <Text style={styles.infoValue}>{report.person_involved || 'N/A'}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Description:</Text>
@@ -335,7 +337,7 @@ export default function AdminDashboard() {
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Coordinates:</Text>
                   <Text style={styles.infoValue}>
-                    {report.location?.lat || report.location?.coords?.latitude}, {report.location?.lng || report.location?.coords?.longitude}
+                    {report.location_lat}, {report.location_lng}
                   </Text>
                 </View>
               </View>
@@ -346,7 +348,7 @@ export default function AdminDashboard() {
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Submitted:</Text>
                   <Text style={styles.infoValue}>
-                    {report.createdAt ? new Date(report.createdAt).toLocaleString() : 'N/A'}
+                    {report.created_at ? new Date(report.created_at).toLocaleString() : 'N/A'}
                   </Text>
                 </View>
                 {report.responders && report.responders.length > 0 && (
