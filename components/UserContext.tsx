@@ -1,5 +1,8 @@
 import { supabase } from '@/lib/supabase';
+import { SyncService } from '@/lib/sync-service';
 import { Session, User } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 export interface UserInfo {
@@ -38,9 +41,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUserState] = useState<UserInfo | null>(null);
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncService, setSyncService] = useState<SyncService | null>(null);
 
   // Initialize auth and load data
   useEffect(() => {
+    initializeSync();
+    
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -78,8 +84,27 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       subscription.unsubscribe();
       usersSubscription.unsubscribe();
+      if (syncService) {
+        syncService.stopSync();
+      }
     };
   }, []);
+
+  const initializeSync = async () => {
+    try {
+      const deviceId = await SyncService.generateDeviceId();
+      const syncServiceInstance = SyncService.getInstance({
+        deviceId,
+        platform: Platform.OS,
+        syncInterval: 30000, // 30 seconds
+        userId: undefined // Will be set when user logs in
+      });
+      
+      setSyncService(syncServiceInstance);
+    } catch (error) {
+      console.error('Failed to initialize sync service:', error);
+    }
+  };
 
   const loadUserProfile = async (authUser: User) => {
     try {
@@ -96,6 +121,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (data) {
         setUserState(data);
+        
+        // Update sync service with user ID and start syncing
+        if (syncService) {
+          syncService['config'].userId = data.id;
+          await syncService.startSync();
+        }
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
@@ -176,6 +207,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    if (syncService) {
+      await syncService.stopSync();
+    }
     await supabase.auth.signOut();
     setUserState(null);
   };
@@ -204,6 +238,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
+      // Broadcast update to all devices
+      if (syncService) {
+        await syncService.broadcastUpdate('users', 'insert', newUser.email);
+      }
+
       await loadUsers();
     } catch (error) {
       console.error('Error adding user:', error);
@@ -226,6 +265,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
 
+      // Broadcast update to all devices
+      if (syncService) {
+        await syncService.broadcastUpdate('users', 'update', email);
+      }
+
       await loadUsers();
     } catch (error) {
       console.error('Error updating user:', error);
@@ -243,6 +287,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         console.error('Error deleting user:', error);
         throw error;
+      }
+
+      // Broadcast update to all devices
+      if (syncService) {
+        await syncService.broadcastUpdate('users', 'delete', email);
       }
 
       await loadUsers();

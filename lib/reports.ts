@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { SyncService } from './sync-service';
 
 export interface Report {
   id?: string;
@@ -42,6 +43,12 @@ export class ReportsService {
         ])
         .select()
         .single();
+
+      // Broadcast update to all devices
+      const syncService = SyncService.getInstance();
+      if (syncService) {
+        await syncService.broadcastUpdate('reports', 'insert', data.id);
+      }
 
       return { data, error };
     } catch (error) {
@@ -110,6 +117,12 @@ export class ReportsService {
         .select()
         .single();
 
+      // Broadcast update to all devices
+      const syncService = SyncService.getInstance();
+      if (syncService) {
+        await syncService.broadcastUpdate('reports', 'update', id);
+      }
+
       return { data, error };
     } catch (error) {
       console.error('Error updating report:', error);
@@ -124,6 +137,12 @@ export class ReportsService {
         .from('reports')
         .delete()
         .eq('id', id);
+
+      // Broadcast update to all devices
+      const syncService = SyncService.getInstance();
+      if (syncService) {
+        await syncService.broadcastUpdate('reports', 'delete', id);
+      }
 
       return { error };
     } catch (error) {
