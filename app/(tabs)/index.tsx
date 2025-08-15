@@ -308,7 +308,15 @@ export default function HomeScreen() {
                 if (!error) {
                   setShowSignUp(false);
                   clearSignUp();
-                  alert('Account created successfully! Please check your email to verify your account.');
+                  
+                  // Setup default admin if this is the first user
+                  try {
+                    await supabase.functions.invoke('admin-setup');
+                  } catch (adminError) {
+                    console.log('Admin setup already completed or failed:', adminError);
+                  }
+                  
+                  alert('Account created successfully! You can now log in with your credentials.');
                 } else {
                   alert('Error creating account: ' + error.message);
                 }
